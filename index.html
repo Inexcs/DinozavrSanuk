@@ -163,6 +163,20 @@
             grounded: false
         };
 
+        // Загрузка изображения динозавра
+        const dinoImage = new Image();
+        dinoImage.src = 'dino.png'; // Замените на путь к вашей картинке
+        let imageLoaded = false;
+        
+        dinoImage.onload = function() {
+            imageLoaded = true;
+        };
+        
+        dinoImage.onerror = function() {
+            console.log('Не удалось загрузить изображение, используется стандартный динозавр');
+            imageLoaded = false;
+        };
+
         const obstacles = [];
         let obstacleTimer = 0;
         let scoreTimer = 0;
@@ -172,16 +186,22 @@
         }
 
         function drawDino() {
-            ctx.fillStyle = '#535353';
-            ctx.fillRect(dino.x, dino.y, dino.width, dino.height);
-            
-            ctx.fillStyle = '#fff';
-            ctx.fillRect(dino.x + 25, dino.y + 10, 8, 8);
-            
-            ctx.fillStyle = '#535353';
-            const legOffset = Math.floor(Date.now() / 100) % 2 === 0 && dino.grounded ? 5 : 0;
-            ctx.fillRect(dino.x + 5, dino.y + dino.height - 15, 12, 15 - legOffset);
-            ctx.fillRect(dino.x + 23, dino.y + dino.height - 15 + legOffset, 12, 15 - legOffset);
+            if (imageLoaded) {
+                // Рисуем картинку
+                ctx.drawImage(dinoImage, dino.x, dino.y, dino.width, dino.height);
+            } else {
+                // Запасной вариант - стандартный динозавр
+                ctx.fillStyle = '#535353';
+                ctx.fillRect(dino.x, dino.y, dino.width, dino.height);
+                
+                ctx.fillStyle = '#fff';
+                ctx.fillRect(dino.x + 25, dino.y + 10, 8, 8);
+                
+                ctx.fillStyle = '#535353';
+                const legOffset = Math.floor(Date.now() / 100) % 2 === 0 && dino.grounded ? 5 : 0;
+                ctx.fillRect(dino.x + 5, dino.y + dino.height - 15, 12, 15 - legOffset);
+                ctx.fillRect(dino.x + 23, dino.y + dino.height - 15 + legOffset, 12, 15 - legOffset);
+            }
         }
 
         function drawObstacle(obstacle) {
