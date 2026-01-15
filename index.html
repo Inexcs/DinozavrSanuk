@@ -30,7 +30,7 @@
             left: 0;
             width: 100%;
             height: 100%;
-            background-image: url('background.png'); /* Ваше фото */
+            background-image: url('background.jpg'); /* Ваше фото */
             background-size: cover;
             background-position: center;
             background-repeat: no-repeat;
@@ -205,6 +205,20 @@
             imageLoaded = false;
         };
 
+        // Загрузка изображения летающего препятствия
+        const birdImage = new Image();
+        birdImage.src = 'bird.png'; // Ваша фотка для летающего препятствия
+        let birdImageLoaded = false;
+        
+        birdImage.onload = function() {
+            birdImageLoaded = true;
+        };
+        
+        birdImage.onerror = function() {
+            console.log('Не удалось загрузить изображение птицы');
+            birdImageLoaded = false;
+        };
+
         const obstacles = [];
         let obstacleTimer = 0;
         let scoreTimer = 0;
@@ -233,13 +247,23 @@
         }
 
         function drawObstacle(obstacle) {
-            ctx.fillStyle = '#535353';
-            if (obstacle.type === 'cactus') {
-                ctx.fillRect(obstacle.x, obstacle.y, obstacle.width, obstacle.height);
-                ctx.fillRect(obstacle.x + 5, obstacle.y - 10, 5, 10);
-                ctx.fillRect(obstacle.x + obstacle.width - 10, obstacle.y - 8, 5, 8);
+            if (obstacle.type === 'bird' && birdImageLoaded) {
+                // Рисуем картинку птицы
+                ctx.drawImage(birdImage, obstacle.x, obstacle.y, obstacle.width, obstacle.height);
             } else {
-                ctx.fillRect(obstacle.x, obstacle.y, obstacle.width, obstacle.height);
+                // Стандартные препятствия
+                ctx.fillStyle = '#535353';
+                if (obstacle.type === 'cactus') {
+                    ctx.fillRect(obstacle.x, obstacle.y, obstacle.width, obstacle.height);
+                    ctx.fillRect(obstacle.x + 5, obstacle.y - 10, 5, 10);
+                    ctx.fillRect(obstacle.x + obstacle.width - 10, obstacle.y - 8, 5, 8);
+                } else if (obstacle.type === 'bird') {
+                    // Запасной вариант для птицы
+                    ctx.fillRect(obstacle.x, obstacle.y, obstacle.width, obstacle.height);
+                    ctx.fillRect(obstacle.x + 5, obstacle.y + 5, obstacle.width - 10, 5);
+                } else {
+                    ctx.fillRect(obstacle.x, obstacle.y, obstacle.width, obstacle.height);
+                }
             }
         }
 
@@ -253,13 +277,38 @@
         }
 
         function createObstacle() {
-            const type = Math.random() > 0.5 ? 'cactus' : 'rock';
-            const height = type === 'cactus' ? 40 + Math.random() * 20 : 30;
-            const width = type === 'cactus' ? 20 : 25 + Math.random() * 15;
+            const rand = Math.random();
+            let type, height, width, y;
+            
+            if (rand > 0.7 && score > 50) {
+                // Летающее препятствие (появляется после 50 очков)
+                type = 'bird';
+                width = 40;
+                height = 30;
+                // Летает на разной высоте
+                const flyHeights = [
+                    canvas.height - 100, // Высоко
+                    canvas.height - 70,  // Средне
+                    canvas.height - 50   // Низко
+                ];
+                y = flyHeights[Math.floor(Math.random() * flyHeights.length)];
+            } else if (rand > 0.35) {
+                // Кактус
+                type = 'cactus';
+                height = 40 + Math.random() * 20;
+                width = 20;
+                y = canvas.height - height - 10;
+            } else {
+                // Камень
+                type = 'rock';
+                height = 30;
+                width = 25 + Math.random() * 15;
+                y = canvas.height - height - 10;
+            }
             
             obstacles.push({
                 x: canvas.width,
-                y: canvas.height - height - 10,
+                y: y,
                 width: width,
                 height: height,
                 type: type
@@ -429,5 +478,4 @@
         drawDino();
     </script>
 </body>
-
 </html>
