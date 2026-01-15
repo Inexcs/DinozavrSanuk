@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Dino Game</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            overflow: hidden;
+            background: #f7f7f7;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+            touch-action: none;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        #gameContainer {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            width: 100vw;
+        }
+
+        #gameCanvas {
+            border: 2px solid #535353;
+            background: #f7f7f7;
+            display: block;
+            max-width: 100%;
+            max-height: 70vh;
+        }
+
+        #scoreDisplay {
+            font-size: 20px;
+            font-weight: bold;
+            margin: 15px 0;
+            color: #535353;
+        }
+
+        #gameOver {
+            display: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(255, 255, 255, 0.95);
+            padding: 30px;
+            border-radius: 15px;
+            text-align: center;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+        }
+
+        #gameOver h2 {
+            color: #535353;
+            margin-bottom: 15px;
+            font-size: 24px;
+        }
+
+        #gameOver p {
+            color: #757575;
+            margin: 10px 0;
+            font-size: 18px;
+        }
+
+        #restartBtn {
+            margin-top: 20px;
+            padding: 12px 30px;
+            font-size: 18px;
+            background: #2481cc;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        #restartBtn:active {
+            background: #1a5f9a;
+        }
+
+        #instructions {
+            text-align: center;
+            color: #757575;
+            margin-top: 10px;
+            font-size: 14px;
+            padding: 0 20px;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <canvas id="gameCanvas"></canvas>
+        <div id="scoreDisplay">Счёт: 0</div>
+        <div id="instructions">Нажми на экран для прыжка</div>
+        
+        <div id="gameOver">
+            <h2>Игра окончена!</h2>
+            <p id="finalScore">Счёт: 0</p>
+            <p id="bestScore">Лучший: 0</p>
+            <button id="restartBtn">Играть снова</button>
+        </div>
+    </div>
+
+    <script>
+        let tg = null;
+        
+        // Безопасная инициализация Telegram WebApp
+        function initTelegram() {
+            if (window.Telegram && window.Telegram.WebApp) {
+                tg = window.Telegram.WebApp;
+                tg.ready();
+                tg.expand();
+            }
+        }
+        
+        // Ждем загрузки Telegram WebApp
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initTelegram);
+        } else {
+            initTelegram();
+        }
+
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreDisplay = document.getElementById('scoreDisplay');
+        const gameOverScreen = document.getElementById('gameOver');
+        const finalScoreEl = document.getElementById('finalScore');
+        const bestScoreEl = document.getElementById('bestScore');
+        const restartBtn = document.getElementById('restartBtn');
+
+        function resizeCanvas() {
+            const maxWidth = Math.min(window.innerWidth - 20, 800);
+            const maxHeight = window.innerHeight * 0.6;
+            canvas.width = maxWidth;
+            canvas.height = Math.min(200, maxHeight);
+        }
+
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+
+        let gameRunning = false;
+        let score = 0;
+        let bestScore = parseInt(localStorage.getItem('dinoScore')) || 0;
+        let gameSpeed = 3;
+        let gravity = 0.6;
+
+        const dino = {
+            x: 50,
+            y: 0,
+            width: 40,
+            height: 50,
+            velocityY: 0,
+            jumping: false,
+            grounded: false
+        };
+
+        const obstacles = [];
+        let obstacleTimer = 0;
+        let scoreTimer = 0;
+
+        function getGroundY() {
+            return canvas.height - dino.height - 10;
+        }
+
+        function drawDino() {
+            ctx.fillStyle = '#535353';
+            ctx.fillRect(dino.x, dino.y, dino.width, dino.height);
+            
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(dino.x + 25, dino.y + 10, 8, 8);
+            
+            ctx.fillStyle = '#535353';
+            const legOffset = Math.floor(Date.now() / 100) % 2 === 0 && dino.grounded ? 5 : 0;
+            ctx.fillRect(dino.x + 5, dino.y + dino.height - 15, 12, 15 - legOffset);
+            ctx.fillRect(dino.x + 23, dino.y + dino.height - 15 + legOffset, 12, 15 - legOffset);
+        }
+
+        function drawObstacle(obstacle) {
+            ctx.fillStyle = '#535353';
+            if (obstacle.type === 'cactus') {
+                ctx.fillRect(obstacle.x, obstacle.y, obstacle.width, obstacle.height);
+                ctx.fillRect(obstacle.x + 5, obstacle.y - 10, 5, 10);
+                ctx.fillRect(obstacle.x + obstacle.width - 10, obstacle.y - 8, 5, 8);
+            } else {
+                ctx.fillRect(obstacle.x, obstacle.y, obstacle.width, obstacle.height);
+            }
+        }
+
+        function drawGround() {
+            ctx.strokeStyle = '#535353';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(0, canvas.height - 10);
+            ctx.lineTo(canvas.width, canvas.height - 10);
+            ctx.stroke();
+        }
+
+        function createObstacle() {
+            const type = Math.random() > 0.5 ? 'cactus' : 'rock';
+            const height = type === 'cactus' ? 40 + Math.random() * 20 : 30;
+            const width = type === 'cactus' ? 20 : 25 + Math.random() * 15;
+            
+            obstacles.push({
+                x: canvas.width,
+                y: canvas.height - height - 10,
+                width: width,
+                height: height,
+                type: type
+            });
+        }
+
+        function updateObstacles() {
+            for (let i = obstacles.length - 1; i >= 0; i--) {
+                obstacles[i].x -= gameSpeed;
+                
+                if (obstacles[i].x + obstacles[i].width < 0) {
+                    obstacles.splice(i, 1);
+                }
+            }
+        }
+
+        function checkCollision() {
+            for (let obstacle of obstacles) {
+                if (dino.x < obstacle.x + obstacle.width &&
+                    dino.x + dino.width > obstacle.x &&
+                    dino.y < obstacle.y + obstacle.height &&
+                    dino.y + dino.height > obstacle.y) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        function jump() {
+            if (!dino.jumping && dino.grounded && gameRunning) {
+                dino.velocityY = -12;
+                dino.jumping = true;
+                dino.grounded = false;
+            }
+        }
+
+        function updateDino() {
+            dino.velocityY += gravity;
+            dino.y += dino.velocityY;
+            
+            const groundY = getGroundY();
+            if (dino.y >= groundY) {
+                dino.y = groundY;
+                dino.velocityY = 0;
+                dino.jumping = false;
+                dino.grounded = true;
+            } else {
+                dino.grounded = false;
+            }
+        }
+
+        function updateScore() {
+            if (gameRunning) {
+                scoreTimer++;
+                if (scoreTimer >= 10) {
+                    score++;
+                    scoreTimer = 0;
+                    scoreDisplay.textContent = `Счёт: ${score}`;
+                    
+                    if (score % 100 === 0) {
+                        gameSpeed += 0.5;
+                    }
+                }
+            }
+        }
+
+        function gameLoop() {
+            if (!gameRunning) return;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            drawGround();
+            updateDino();
+            drawDino();
+            updateObstacles();
+            updateScore();
+            
+            obstacles.forEach(drawObstacle);
+            
+            obstacleTimer++;
+            if (obstacleTimer > 100 - gameSpeed * 5) {
+                createObstacle();
+                obstacleTimer = 0;
+            }
+            
+            if (checkCollision()) {
+                endGame();
+                return;
+            }
+            
+            requestAnimationFrame(gameLoop);
+        }
+
+        function startGame() {
+            gameRunning = true;
+            score = 0;
+            gameSpeed = 3;
+            obstacles.length = 0;
+            obstacleTimer = 0;
+            scoreTimer = 0;
+            dino.y = getGroundY();
+            dino.velocityY = 0;
+            dino.jumping = false;
+            dino.grounded = true;
+            scoreDisplay.textContent = 'Счёт: 0';
+            gameOverScreen.style.display = 'none';
+            gameLoop();
+        }
+
+        function endGame() {
+            gameRunning = false;
+            finalScoreEl.textContent = `Счёт: ${score}`;
+            
+            if (score > bestScore) {
+                bestScore = score;
+                localStorage.setItem('dinoScore', bestScore);
+            }
+            
+            bestScoreEl.textContent = `Лучший: ${bestScore}`;
+            gameOverScreen.style.display = 'block';
+            
+            // Безопасная отправка данных в Telegram
+            if (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) {
+                try {
+                    tg.sendData(score.toString());
+                } catch (e) {
+                    console.log('Не удалось отправить данные в Telegram');
+                }
+            }
+        }
+
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            if (!gameRunning) {
+                startGame();
+            } else {
+                jump();
+            }
+        });
+
+        canvas.addEventListener('click', () => {
+            if (!gameRunning) {
+                startGame();
+            } else {
+                jump();
+            }
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'Space' || e.code === 'ArrowUp') {
+                e.preventDefault();
+                if (!gameRunning) {
+                    startGame();
+                } else {
+                    jump();
+                }
+            }
+        });
+
+        restartBtn.addEventListener('click', () => {
+            startGame();
+        });
+
+        dino.y = getGroundY();
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        drawGround();
+        drawDino();
+    </script>
+</body>
+</html>
